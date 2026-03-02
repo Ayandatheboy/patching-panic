@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Ntando space adventures</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#060622">
+
+<style>
+* { box-sizing: border-box; user-select: none; }
+body { margin:0; font-family: Arial, sans-serif; color:white; display:flex; flex-direction:column; align-items:center; overflow:hidden; background: radial-gradient(circle at bottom, #060622, #000); }
+
+/* STARS */
+body::before {
+  content:""; position:fixed; inset:0;
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, white, transparent),
+    radial-gradient(1px 1px at 40% 80%, white, transparent),
+    radial-gradient(2px 2px at 70% 30%, white, transparent),
+    radial-gradient(1px 1px at 90% 60%, white, transparent);
+  opacity:0.9; z-index:-3;
+}
+
+/* PLANETS */
+.planet{ position:fixed; border-radius:90%; filter:blur(0.1px); z-index:-2; }
+.planet.one{ width:380px; height:180px; background:radial-gradient(circle at 90% 40%, #ff9f9f, #7a0000); top:10%; left:-60px; }
+.planet.two{ width:120px; height:120px; background:radial-gradient(circle at 30% 30%, #9fd7ff, #003366); bottom:15%; right:-40px; }
+
+h1{ margin:10px 0; }
+#hud{ width:90%; max-width:400px; display:flex; justify-content:space-between; margin-bottom:10px; align-items:center; }
+#health{ width:70%; height:12px; background:#222; border-radius:6px; overflow:hidden; }
+#health-bar{ height:100%; width:100%; background:linear-gradient(90deg, #00ff88, #4dff88); transition: width 0.13s; }
+#grid{ display:grid; grid-template-columns: repeat(6, 1fr); gap:8px; width:90%; max-width:400px; position:relative; }
+
+.tile{ aspect-ratio:1; border-radius:12px; cursor:pointer; position:relative; transition: transform 0.15s; }
+.tile::after{ content:"🚀"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:22px; }
+.red{ background:linear-gradient(145deg, #ff5f5f, #b30000); }
+.blue{ background:linear-gradient(145deg, #5faaff, #0033aa); }
+.green{ background:linear-gradient(145deg, #5fff9c, #008844); }
+.yellow{ background:linear-gradient(145deg, #fff27a, #cc9900); }
+.purple{ background:linear-gradient(145deg, #d38cff, #6a00aa); }
+
+/* MATCH */
+@keyframes pop{ to{ transform:scale(0); opacity:0; } }
+.match{ animation:pop 0.50s forwards; }
+
+/* EXPLOSION */
+@keyframes explode{ to{ transform:translate(var(--x), var(--y)) rotate(720deg) scale(0); opacity:0; } }
+.explode{ animation:explode 1s forwards ease-out; }
+
+/* FALLING ALIENS */
+.alien{ position:fixed; top:-30px; font-size:52px; animation:fall linear forwards; pointer-events:none; z-index:-1; }
+@keyframes fall{ to{ transform:translateY(110vh); opacity:0; } }
+
+#game-over{ display:none; margin-top:20px; font-size:24px; text-align:center; }
+</style>
+</head>
+
+<body>
+<div class="planet one"></div>
+<div class="planet two"></div>
+<h1>🚀 Patchwork Panic</h1>
+
+<div id="hud">
+  <div id="health"><div id="health-bar"></div></div>
+  <div id="score">Score: 0</div>
+</div>
+
+<div id="grid"></div>
+
+<div id="game-over">
+  💥 SHIP DESTROYED<br/>
+  That explosion was personal.
+  Ntandos spacetime adventures.
+</div>
+
+<script>
+const colors = ["red","blue","green","yellow","purple"];
+const gridSize=6;
+const grid=document.getElementById("grid");
+const scoreDisplay=document.getElementById("score");
+const healthBar=document.getElementById("health-bar");
+const gameOverText=document.getElementById("game-over");
+
+let tiles=[], selectedTile=null, score=0, health=100;
+
+function randomColor(){ return colors[Math.floor(Math.random()*colors.length)]; }
+
+function createGrid(){
+  grid.innerHTML=""; tiles=[];
+  for(let i=0;i<gridSize*gridSize;i++){
+    const tile=document.createElement("div");
+    tile.className="tile "+randomColor();
+    tile.addEventListener("click",()=>selectTile(tile));
+    tiles.push(tile); grid.appendChild(tile);
+  }
+}
+
+function selectTile(tile){
+  if(!selectedTile){ selectedTile=tile; tile.style.outline="3px solid white"; }
+  else{
+    selectedTile.style.outline="none";
+    swapTiles(selectedTile,tile);
+    selectedTile=null;
+    setTimeout(checkMatches,150);
+  }
+}
+
+function swapTiles(a,b){ const temp=a.className; a.className=b.className; b.className=temp; }
+
+function checkMatches(){
+  let matched=[];
+  for(let i=0;i<tiles.length;i++){
+    const c=tiles[i].classList[1];
+    if(i%gridSize<gridSize-2 && tiles[i+1].classList[1]===c && tiles[i+2].classList[1]===c) matched.push(i,i+1,i+2);
+    if(i<gridSize*(gridSize-2) && tiles[i+gridSize].classList[1]===c && tiles[i+gridSize*2].classList[1]===c) matched.push(i,i+gridSize,i+gridSize*2);
+  }
+
+  if(matched.length){
+    matched=[...new Set(matched)];
+    score+=matched.length*10;
+    health=Math.min(100,health+matched.length);
+    scoreDisplay.textContent="Score: "+score;
+    healthBar.style.width=health+"%";
+    matched.forEach(i=>{
+      tiles[i].classList.add("match");
+      setTimeout(()=>{ tiles[i].className="tile "+randomColor(); },250);
+    });
+  }
+}
+
+function damageShip(){
+  health-=2;
+  healthBar.style.width=health+"%";
+  if(health<=0) explodeShip();
+}
+
+function explodeShip(){
+  clearInterval(damageInterval);
+  grid.style.pointerEvents="none";
+  tiles.forEach(tile=>{
+    tile.style.setProperty("--x",(Math.random()*600-300)+"px");
+    tile.style.setProperty("--y",(Math.random()*600-300)+"px");
+    tile.classList.add("explode");
+  });
+  setTimeout(()=>{ gameOverText.style.display="block"; },900);
+}
+
+function spawnAlien(){
+  const alien=document.createElement("div");
+  alien.className="alien"; alien.textContent="👽";
+  alien.style.left=Math.random()*100+"vw";
+  alien.style.animationDuration=(3+Math.random()*3)+"s";
+  document.body.appendChild(alien);
+  setTimeout(()=>alien.remove(),6000);
+}
+
+createGrid();
+const damageInterval=setInterval(damageShip,500);
+setInterval(spawnAlien,1000);
+
+// 🔧 Service Worker Registration
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("service-worker.js")
+    .then(()=>console.log("Service Worker Registered"))
+    .catch(err=>console.log("SW failed:",err));
+}
+</script>
+</body>
+</html>
